@@ -75,23 +75,21 @@ class iRacingTelemetry:
         self.brake_values.append(brake_percent)
 
 def main(tel):
+    print("Initializing plot...")
+    
     # Setup visualization plot
     fig, ax = plt.subplots(figsize=(12, 6))
     
-    # Set initial title based on detection status
-    if tel.game_running and tel.car_detected:
-        plt.title("Trail Braking Analysis")
-    else:
-        plt.title("Waiting for iRacing telemetry...")
-    
-    ax.set_xlabel("Time (s)")
-    ax.set_ylabel("% Input")
-    
-    # Create line objects
+    # Create empty line objects
     throttle_line, = ax.plot([], [], 'g-', label='Throttle')
     brake_line, = ax.plot([], [], 'r-', label='Brake (Reverse)')
     
     # Format plot
+    ax.set_xlabel("Time (s)")
+    if tel.game_running and tel.car_detected:
+        plt.title("Trail Braking Analysis")
+    
+    # Initial empty plot setup
     ax.set_ylim(-100, 100)  # Invert brake display
     ax.legend(loc='upper right')
     
@@ -99,9 +97,18 @@ def main(tel):
         """Initialize empty plot lines"""
         throttle_line.set_data([], [])
         brake_line.set_data([], [])
+        
+        # Set initial title based on detection status
+        if tel.game_running and tel.car_detected:
+            plt.title("Trail Braking Analysis")
+        elif not tel.game_running:
+            plt.title("Waiting for iRacing connection...")
+        else:  # car detected but game might not be running
+            plt.title("Player Car Detected")
+            
         return throttle_line, brake_line
     
-    def update_plot():
+    def update_plot(frame):
         """Update plot animation"""
         # Only update if we have data
         if tel.timestamps:
@@ -112,35 +119,21 @@ def main(tel):
             # Invert brake pressure for clearer visualization of release
             brake_line.set_data(rel_time, [-val for val in tel.brake_values])
             
-        ax.relim()
-        ax.autoscale_view()
+            # Update title if needed
+            ax.set_title(f"Trail Braking Analysis - {len(tel.timestamps)} points")
+            
+        fig.canvas.draw_idle()  # Ensure plot is updated
         return throttle_line, brake_line
     
-    # Create animation
-    ani = FuncAnimation(fig, update_plot, init_func=init,
-                       blit=True, interval=UPDATE_INTERVAL)
-    
-    # Status monitoring (prints when game starts and car is detected)
-    last_status_check = time.time()
-    
-    # Update the title based on detection status
-    def update_title():
-        if tel.game_running:
-            game_status = "Game running"
-        else:
-            game_status = "No iRacing connection detected"
-            
-        if tel.car_detected:
-            car_status = "Car detected"
-        else:
-            car_status = "No player car found"
-            
-        plt.title(f"{game_status} | {car_status}")
+    try:
+        ani = FuncAnimation(fig, update_plot, init_func=init,
+                          blit=True, interval=UPDATE_INTERVAL)
         
-    # Display status updates
-    while True:
-        time.sleep(1)
-        update_title()
+        # Show plot after animation is created
+        plt.tight_layout()
+        plt.show()
+    except Exception as e:
+        print(f"Error in main: {e}")
     
 if __name__ == "__main__":
     # Initialize telemetry handler
@@ -158,6 +151,11 @@ if __name__ == "__main__":
     udp_thread.start()
     
     try:
+        print("Starting main function...")
         main(tel)
+        
+        # Keep the program running
+        while True:
+            time.sleep(1)
     except KeyboardInterrupt:
         print("\nProgram terminated by user")
